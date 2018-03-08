@@ -6,7 +6,7 @@ from vispy import app, gloo
 import OpenGL.GL as gl
 
 # WARNING: doesn't work with Qt4 (update() does not call on_draw()??)
-app.use_app('PyGlet') # Set backend
+app.use_app('PyGlet')  # Set backend
 
 # Color vertex shader
 #-------------------------------------------------------------------------------
@@ -96,14 +96,20 @@ void main() {
 # (Ref: http://www.songho.ca/opengl/gl_transform.html)
 #-------------------------------------------------------------------------------
 # Model-view matrix
+
+
 def _compute_model_view(model, view):
     return np.dot(model, view)
 
 # Model-view-projection matrix
+
+
 def _compute_model_view_proj(model, view, proj):
     return np.dot(np.dot(model, view), proj)
 
 # Normal matrix (Ref: http://www.songho.ca/opengl/gl_normaltransform.html)
+
+
 def _compute_normal_matrix(model, view):
     return np.linalg.inv(np.dot(model, view)).T
 
@@ -112,6 +118,8 @@ def _compute_normal_matrix(model, view):
 # Ref:
 # 1) https://strawlab.org/2011/11/05/augmented-reality-with-OpenGL
 # 2) https://github.com/strawlab/opengl-hz/blob/master/src/calib_test_utils.py
+
+
 def _compute_calib_proj(K, x0, y0, w, h, nc, fc, window_coords='y_down'):
     """
     :param K: Camera matrix.
@@ -131,25 +139,31 @@ def _compute_calib_proj(K, x0, y0, w, h, nc, fc, window_coords='y_down'):
     # systems are the same
     if window_coords == 'y_up':
         proj = np.array([
-            [2 * K[0, 0] / w, -2 * K[0, 1] / w, (-2 * K[0, 2] + w + 2 * x0) / w, 0],
+            [2 * K[0, 0] / w, -2 * K[0, 1] / w,
+                (-2 * K[0, 2] + w + 2 * x0) / w, 0],
             [0, -2 * K[1, 1] / h, (-2 * K[1, 2] + h + 2 * y0) / h, 0],
-            [0, 0, q, qn], # This row is standard glPerspective and sets near and far planes
+            # This row is standard glPerspective and sets near and far planes
+            [0, 0, q, qn],
             [0, 0, -1, 0]
-        ]) # This row is also standard glPerspective
+        ])  # This row is also standard glPerspective
 
     # Draw the images right side up and modify the projection matrix so that OpenGL
     # will generate window coords that compensate for the flipped image coords
     else:
         assert window_coords == 'y_down'
         proj = np.array([
-            [2 * K[0, 0] / w, -2 * K[0, 1] / w, (-2 * K[0, 2] + w + 2 * x0) / w, 0],
+            [2 * K[0, 0] / w, -2 * K[0, 1] / w,
+                (-2 * K[0, 2] + w + 2 * x0) / w, 0],
             [0, 2 * K[1, 1] / h, (2 * K[1, 2] - h + 2 * y0) / h, 0],
-            [0, 0, q, qn], # This row is standard glPerspective and sets near and far planes
+            # This row is standard glPerspective and sets near and far planes
+            [0, 0, q, qn],
             [0, 0, -1, 0]
-        ]) # This row is also standard glPerspective
+        ])  # This row is also standard glPerspective
     return proj.T
 
 #-------------------------------------------------------------------------------
+
+
 class _Canvas(app.Canvas):
     def __init__(self, vertices, faces, size, K, R, t, clip_near, clip_far,
                  bg_color=(0.0, 0.0, 0.0, 0.0), ambient_weight=0.1,
@@ -172,19 +186,23 @@ class _Canvas(app.Canvas):
         self.depth = np.array([])
 
         # Model matrix
-        self.mat_model = np.eye(4, dtype=np.float32) # From object space to world space
+        # From object space to world space
+        self.mat_model = np.eye(4, dtype=np.float32)
 
         # View matrix (transforming also the coordinate system from OpenCV to
         # OpenGL camera space)
-        self.mat_view = np.eye(4, dtype=np.float32) # From world space to eye space
+        # From world space to eye space
+        self.mat_view = np.eye(4, dtype=np.float32)
         self.mat_view[:3, :3], self.mat_view[:3, 3] = R, t.squeeze()
         yz_flip = np.eye(4, dtype=np.float32)
         yz_flip[1, 1], yz_flip[2, 2] = -1, -1
-        self.mat_view = yz_flip.dot(self.mat_view) # OpenCV to OpenGL camera system
-        self.mat_view = self.mat_view.T # OpenGL expects column-wise matrix format
+        # OpenCV to OpenGL camera system
+        self.mat_view = yz_flip.dot(self.mat_view)
+        self.mat_view = self.mat_view.T  # OpenGL expects column-wise matrix format
 
         # Projection matrix
-        self.mat_proj = _compute_calib_proj(K, 0, 0, size[0], size[1], clip_near, clip_far)
+        self.mat_proj = _compute_calib_proj(
+            K, 0, 0, size[0], size[1], clip_near, clip_far)
 
         # Create buffers
         self.vertex_buffer = gloo.VertexBuffer(vertices)
@@ -195,10 +213,10 @@ class _Canvas(app.Canvas):
 
     def on_draw(self, event):
         if self.render_rgb:
-            self.draw_color() # Render color image
+            self.draw_color()  # Render color image
         if self.render_depth:
-            self.draw_depth() # Render depth image
-        app.quit() # Immediately exit the application after the first drawing
+            self.draw_depth()  # Render depth image
+        app.quit()  # Immediately exit the application after the first drawing
 
     def draw_color(self):
         program = gloo.Program(_color_vertex_code, _color_fragment_code)
@@ -207,7 +225,8 @@ class _Canvas(app.Canvas):
         program['u_light_ambient_w'] = self.ambient_weight
         program['u_mv'] = _compute_model_view(self.mat_model, self.mat_view)
         # program['u_nm'] = compute_normal_matrix(self.model, self.view)
-        program['u_mvp'] = _compute_model_view_proj(self.mat_model, self.mat_view, self.mat_proj)
+        program['u_mvp'] = _compute_model_view_proj(
+            self.mat_model, self.mat_view, self.mat_proj)
 
         # Texture where we render the scene
         render_tex = gloo.Texture2D(shape=self.shape + (4,))
@@ -224,21 +243,24 @@ class _Canvas(app.Canvas):
             program.draw('triangles', self.index_buffer)
 
             # Retrieve the contents of the FBO texture
-            self.rgb = gloo.read_pixels((0, 0, self.size[0], self.size[1]))[:, :, :3]
+            self.rgb = gloo.read_pixels(
+                (0, 0, self.size[0], self.size[1]))[:, :, :3]
             self.rgb = np.copy(self.rgb)
 
     def draw_depth(self):
         program = gloo.Program(_depth_vertex_code, _depth_fragment_code)
         program.bind(self.vertex_buffer)
         program['u_mv'] = _compute_model_view(self.mat_model, self.mat_view)
-        program['u_mvp'] = _compute_model_view_proj(self.mat_model, self.mat_view, self.mat_proj)
+        program['u_mvp'] = _compute_model_view_proj(
+            self.mat_model, self.mat_view, self.mat_proj)
 
         # Texture where we render the scene
         render_tex = gloo.Texture2D(shape=self.shape + (4,), format=gl.GL_RGBA,
                                     internalformat=gl.GL_RGBA32F)
 
         # Frame buffer object
-        fbo = gloo.FrameBuffer(render_tex, gloo.RenderBuffer(self.shape, format='depth'))
+        fbo = gloo.FrameBuffer(
+            render_tex, gloo.RenderBuffer(self.shape, format='depth'))
         with fbo:
             gloo.set_state(depth_test=True)
             gloo.set_state(cull_face=True)
@@ -250,7 +272,8 @@ class _Canvas(app.Canvas):
 
             # Retrieve the contents of the FBO texture
             self.depth = self.read_fbo_color_rgba32f(fbo)
-            self.depth = self.depth[:, :, 0] # Depth is saved in the first channel
+            # Depth is saved in the first channel
+            self.depth = self.depth[:, :, 0]
 
     @staticmethod
     def read_fbo_color_rgba32f(fbo):
@@ -269,6 +292,8 @@ class _Canvas(app.Canvas):
 
 #-------------------------------------------------------------------------------
 # Ref: https://github.com/vispy/vispy/blob/master/examples/demo/gloo/offscreen.py
+
+
 def render(model, im_size, K, R, t, clip_near=100, clip_far=2000,
            surf_color=None, bg_color=(0.0, 0.0, 0.0, 0.0),
            ambient_weight=0.1, mode='rgb+depth'):
@@ -284,7 +309,8 @@ def render(model, im_size, K, R, t, clip_near=100, clip_far=2000,
             assert(model['pts'].shape[0] == model['colors'].shape[0])
             colors = model['colors']
             if colors.max() > 1.0:
-                colors /= 255.0 # Color values are expected to be in range [0, 1]
+                # Color values are expected to be in range [0, 1]
+                colors /= 255.0
         else:
             colors = np.ones((model['pts'].shape[0], 4), np.float32) * 0.5
     else:
@@ -292,7 +318,7 @@ def render(model, im_size, K, R, t, clip_near=100, clip_far=2000,
     vertices_type = [('a_position', np.float32, 3),
                      #('a_normal', np.float32, 3),
                      ('a_color', np.float32, colors.shape[1])]
-    vertices = np.array(zip(model['pts'], colors), vertices_type)
+    vertices = np.array(list(zip(model['pts'], colors)), vertices_type)
 
     # Rendering
     #---------------------------------------------------------------------------
