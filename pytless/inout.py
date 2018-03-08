@@ -6,6 +6,7 @@ import struct
 # import yaml
 import ruamel.yaml as yaml
 
+
 def load_info(path):
     with open(path, 'r') as f:
         info = yaml.load(f, Loader=yaml.CLoader)
@@ -21,6 +22,7 @@ def load_info(path):
                     info[eid]['cam_t_w2c']).reshape((3, 1))
     return info
 
+
 def save_info(path, info):
     for im_id in sorted(info.keys()):
         im_info = info[im_id]
@@ -33,6 +35,7 @@ def save_info(path, info):
     with open(path, 'w') as f:
         yaml.dump(info, f, Dumper=yaml.CDumper, width=10000)
 
+
 def load_gt(path):
     with open(path, 'r') as f:
         gts = yaml.load(f, Loader=yaml.CLoader)
@@ -43,6 +46,7 @@ def load_gt(path):
                 if 'cam_t_m2c' in gt.keys():
                     gt['cam_t_m2c'] = np.array(gt['cam_t_m2c']).reshape((3, 1))
     return gts
+
 
 def save_gt(path, gts):
     for im_id in sorted(gts.keys()):
@@ -57,6 +61,7 @@ def save_gt(path, gts):
     with open(path, 'w') as f:
         yaml.dump(gts, f, Dumper=yaml.CDumper, width=10000)
 
+
 def load_colors(path):
     """
     Loads colors from a txt file - each line contains space-separated R, G and B
@@ -69,6 +74,7 @@ def load_colors(path):
         lines = f.read().splitlines()
         colors = [map(float, l.split(' ')) for l in lines]
         return colors
+
 
 def load_ply(path):
     """
@@ -83,7 +89,7 @@ def load_ply(path):
 
     n_pts = 0
     n_faces = 0
-    face_n_corners = 3 # Only triangular faces are supported
+    face_n_corners = 3  # Only triangular faces are supported
     pt_props = []
     face_props = []
     is_binary = False
@@ -92,7 +98,7 @@ def load_ply(path):
 
     # Read header
     while True:
-        line = f.readline().rstrip('\n').rstrip('\r') # Strip the newline character(s)
+        line = f.readline().rstrip('\n').rstrip('\r')  # Strip the newline character(s)
         if line.startswith('element vertex'):
             n_pts = int(line.split(' ')[-1])
             header_vertex_section = True
@@ -101,7 +107,7 @@ def load_ply(path):
             n_faces = int(line.split(' ')[-1])
             header_vertex_section = False
             header_face_section = True
-        elif line.startswith('element'): # Some other element
+        elif line.startswith('element'):  # Some other element
             header_vertex_section = False
             header_face_section = False
         elif line.startswith('property') and header_vertex_section:
@@ -136,7 +142,7 @@ def load_ply(path):
         is_color = True
         model['colors'] = np.zeros((n_pts, 3), np.float)
 
-    formats = { # For binary format
+    formats = {  # For binary format
         'float': ('f', 4),
         'double': ('d', 8),
         'int': ('i', 4),
@@ -193,7 +199,8 @@ def load_ply(path):
                 if prop[0] == 'n_corners':
                     if int(elems[prop_id]) != face_n_corners:
                         print('Error: Only triangular faces are supported.')
-                        print('Number of face corners: ' + str(int(elems[prop_id])))
+                        print('Number of face corners: ' +
+                              str(int(elems[prop_id])))
                         exit(-1)
                 else:
                     prop_vals[prop[0]] = elems[prop_id]
@@ -204,4 +211,41 @@ def load_ply(path):
 
     f.close()
 
+    #######################################
+    # Compute edges and normals
+    #######################################
+
+    pts = model['pts']
+    faces = model['faces']
+
+    model_graph = {}
+    edges_graph = {}
+    normals = []
+    for i in range(0, faces.shape[0]):
+        face = faces[i].astype(int)
+
+        p0 = pts[face[0]]
+        p1 = pts[face[1]]
+        p2 = pts[face[2]]
+        n = np.cross(p1-p0, p2-p0)
+        n = n / np.linalg.norm(n)
+        normals.append(n)
+
+        for n in range(0, len(face)):
+            v1 = face[n]
+            v2 = face[(n+1) % 3]
+            if v1 > v2:
+                v1, v2 = v2, v1
+            edge = (v1, v2)
+            if edge not in edges_graph:
+                edges_graph[edge] = []
+            edges_graph[edge].append(i)
+
+        for index in face:
+            if index not in model_graph:
+                model_graph[index] = []
+            model_graph[index].append(i)
+
+    model['edges_graph'] = edges_graph
+    model['normals'] = normals
     return model

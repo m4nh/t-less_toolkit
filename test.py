@@ -70,6 +70,16 @@ model_path = '/Users/daniele/Downloads/industrial_part1.ply'
 model = inout.load_ply(model_path)
 
 
+for edge, faces in model['edges_graph'].iteritems():
+    if len(faces) >= 2:
+        f1 = model['faces'][faces[0]]
+        f2 = model['faces'][faces[1]]
+        n1 = model['normals'][faces[0]]
+        n2 = model['normals'][faces[1]]
+
+        angle = math.acos(np.clip(np.dot(n1, n2), -1.0, 1.0))
+        print(edge, f1, f2, "-", angle)
+sys.exit(0)
 #######################################
 # Dataset data
 #######################################
