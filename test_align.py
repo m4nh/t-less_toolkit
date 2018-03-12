@@ -17,13 +17,15 @@ class LineOptimizer(object):
 
     def __init__(self, K, image, model, instance_frame):
         self.K = K
-        self.image = image
-        self.gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        kernel = np.ones((3, 3), np.float32)/9.0
+        self.image = cv2.filter2D(image, -1, kernel)
+        self.gray = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
+
         self.img_size = (640, 480)
         self.model = model
         self.instance_frame = instance_frame
         self.lsd = cv2.createLineSegmentDetector(0)
-        self.gains = [5, 5, 5, 200, 200, 200.0]
+        self.gains = [10, 10, 10, 50, 50, 50]
 
     def getEdgesWithThreshold(self, model, th=1.0):
         for edge, faces in self.model['edges_graph'].iteritems():
@@ -60,14 +62,15 @@ class LineOptimizer(object):
 
         # map(float, np.array(args['initial_guess']))
         x0 = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-        max_disp = 0.02
+        max_disp = 0.05
+        max_angle = 1.0
         bounds = [
             (-max_disp, max_disp),
             (-max_disp, max_disp),
             (-max_disp, max_disp),
-            (-math.pi, math.pi),
-            (-math.pi, math.pi),
-            (-math.pi, math.pi)
+            (-max_angle, max_angle),
+            (-max_angle, max_angle),
+            (-max_angle, max_angle)
         ]
 
         def cb(x):
@@ -81,15 +84,18 @@ class LineOptimizer(object):
             #                options={'maxiter': 100000, 'disp': True, 'eps': 0.001})
 
             res = differential_evolution(self.optimize,
-                                         bounds,
-                                         mutation=(0, 0.001)
+                                         bounds=bounds
                                          )
+
+            # res = minimize(self.optimize, x0,
+            #                method='Nelder-Mead',
+            #                bounds=bounds,
+            #                options={'maxiter': 100000, 'disp': True, 'fatol': 0.1})
 
         if opt_type == "RGB":
             res = minimize(self.optimizeRGBDifference, x0,
                            method='Nelder-Mead',
                            bounds=bounds,
-
                            options={'maxiter': 100000, 'disp': True})
 
             # res = differential_evolution(self.optimizeRGBDifference,
@@ -103,8 +109,9 @@ class LineOptimizer(object):
     def optimize(self, x):
 
         x = x.reshape(6,).copy()
-        print("CURRENT X", x)
         base_frame = self.instance_frame
+        x = np.multiply(x, self.gains)
+
         frame = KDLFromArray(x, fmt=LineOptimizer.DEFAULT_FORMAT)
         frame = base_frame*frame
 
@@ -116,30 +123,32 @@ class LineOptimizer(object):
             self.model,
             self.img_size,
             self.K,
-            R, t, mode='rgb', surf_color=(0.1, 0.1, 0.1))
+            R, t, mode='rgb', surf_color=(1, 1, 1), ambient_weight=0.0)
 
-        rgb_lines = lsd.detect(gray)[0]
+        rgb_lines = lsd.detect(self.gray)[0]
         model_lines = lsd.detect(cv2.cvtColor(ren_rgb, cv2.COLOR_BGR2GRAY))[0]
 
         zeros = np.zeros(self.gray.shape)
         rgb_lines_img = self.drawSegments(zeros, rgb_lines)
         model_lines_img = self.drawSegments(zeros, model_lines)
 
-        rendered_image = cv2.addWeighted(image, 1, ren_rgb, 0.85, 0)
+        rendered_image = cv2.addWeighted(self.image, 1, ren_rgb, 0.85, 0)
 
         # rgb_lines_img = lsd.drawSegments(zeros, rgb_lines)
         # model_lines_img = lsd.drawSegments(zeros, model_lines)
-
-        diff = rgb_lines_img - model_lines_img
+        #diff = rgb_lines_img - model_lines_img
+        diff = cv2.bitwise_and(rgb_lines_img, model_lines_img)
+        #diff = np.abs(diff.astype(np.uint8))
 
         count = np.count_nonzero(diff.ravel())
+        print("MAXMIN", np.min(diff), np.max(diff), count)
 
         cv2.imshow("model", rendered_image)
         cv2.imshow("opt_rgb", rgb_lines_img)
         cv2.imshow("opt_model", model_lines_img)
         cv2.imshow("opt_diff", diff)
         cv2.waitKey(10)
-        return count
+        return -count
 
     def optimizeRGBDifference(self, x):
 
@@ -162,7 +171,7 @@ class LineOptimizer(object):
             self.model,
             self.img_size,
             self.K,
-            R, t, mode='rgb', surf_color=(76.0/255.0, 72.0/255.0, 82.0/255.0))
+            R, t, mode='rgb')  # , surf_color=(76.0/255.0, 72.0/255.0, 82.0/255.0))
 
         gray = self.gray
         rgb_lines = lsd.detect(gray)[0]
@@ -260,7 +269,7 @@ dataset_path = '/Users/daniele/Desktop/to_delete/roars_dataset/indust_scene_1_do
 camera_extrinsics_path = '/Users/daniele/Desktop/to_delete/roars_dataset/indust_scene_1_dome/camera_extrinsics.txt'
 camera_intrinsics_path = '/Users/daniele/Desktop/to_delete/roars_dataset/indust_scene_1_dome/camera_intrisics.txt'
 poses_path = '/Users/daniele/Desktop/to_delete/roars_dataset/indust_scene_1_dome/robot_poses.txt'
-model_path = '/Users/daniele/Downloads/industrial_part1.ply'
+model_path = '/Users/daniele/Downloads/industrial_part_color.ply'
 
 
 #######################################
@@ -360,7 +369,8 @@ while True:
 
         cv2.imshow("model", image)
         cv2.waitKey(0)
-        optimized_correction = KDLFromArray(lopt.runOptimization(), fmt="RPY")
+        optimized_correction = KDLFromArray(
+            lopt.runOptimization(opt_type="LINES"), fmt="RPY")
     # lopt.optimize(KDLtoArray(eye, fmt='RPY'))
     image[ren_rgb != 0] = ren_rgb[ren_rgb != 0]
 
