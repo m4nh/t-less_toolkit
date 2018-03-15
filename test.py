@@ -14,7 +14,7 @@ from ariadne import Ariadne, ImageSegmentator
 
 
 class SuperpixelOptimizer(object):
-    DEFAULT_FORMAT = 'RPY'
+    DEFAULT_FORMAT = 'XYZQ'
 
     def __init__(self, image, K, model, instance_frame, ariadne, debug=False):
         self.image = image
@@ -26,13 +26,13 @@ class SuperpixelOptimizer(object):
         self.model = model
         self.instance_frame = instance_frame
         self.lsd = cv2.createLineSegmentDetector(0)
-        self.gains = [20, 20, 20, 150, 150, 150]
+        self.gains = np.array([1.0, 1, 1, 5, 5, 5, 5])*0.1
 
     def optimizeSuperpixels(self, x):
 
         x = x.reshape(6,).copy()
         base_frame = self.instance_frame
-        #x = np.multiply(x, self.gains)
+        # x = np.multiply(x, self.gains)
 
         frame = KDLFromArray(x, fmt=LineOptimizer.DEFAULT_FORMAT)
         frame = base_frame*frame
@@ -82,7 +82,8 @@ class SuperpixelOptimizer(object):
 
     def optimizeSuperpixelsReduced(self, x):
 
-        x = x.reshape(6,).copy()
+        x = x.reshape(7,).copy()
+
         base_frame = self.instance_frame
         #x = np.multiply(x, self.gains)
 
@@ -97,8 +98,19 @@ class SuperpixelOptimizer(object):
                                   mode='rgb', surf_color=[0, 1.0, 0])
 
         nonzeroindices = np.argwhere(ren_rgb > 0)
-        labels = np.unique(
-            ariadne.graph.labels[nonzeroindices[:, 0], nonzeroindices[:, 1]])
+        labels_raw = ariadne.graph.labels[
+            nonzeroindices[:, 0],
+            nonzeroindices[:, 1]
+        ].ravel()
+        labels = np.unique(labels_raw)
+
+        y = np.bincount(labels_raw)
+        ii = np.nonzero(y)[0]
+        labels_count = dict(zip(ii, y[ii]))
+        labels_variance = np.var(y[ii])
+        #print("LABELS_COUNT", labels_count, dict(labels_count))
+        # And then:
+
         # print("LABELS", labels)
         # for index in nonzeroindices:
         #     label = ariadne.graph.labels[index[0], index[1]]
@@ -108,10 +120,16 @@ class SuperpixelOptimizer(object):
         if self.debug:
             output_image = self.output_image.copy()
         counter = 0
-
+        occupied = 0.0
+        total = 0.0
+        occupied_map = {}
         for l in labels:
             label_indices = np.argwhere(ariadne.graph.labels == l)
             counter += label_indices.shape[0]
+            occupied += labels_count[l]
+            total += label_indices.shape[0]
+            occupied_map[l] = float(labels_count[l]) / \
+                float(label_indices.shape[0])
 
             if self.debug:
                 output_image[label_indices[:, 0], label_indices[:, 1]] = np.array(
@@ -126,39 +144,50 @@ class SuperpixelOptimizer(object):
             zero[nonzeroindices[:, 0], nonzeroindices[:, 1]] = 0
         counter -= nonzeroindices.shape[0]
 
+        void_space_single = 0.0
+        for k, v in occupied_map.items():
+            void_space_single += v
+        void_space_single /= float(labels.shape[0])
+
+        void_space = (float(total)-float(occupied))/float(total)
+        #print("VOID_SPACE", void_space, void_space_single)
+
         if self.debug:
             cv2.imshow("model", ren_rgb)
             cv2.imshow("image", output_image)
             cv2.imshow("zero", zero)
             c = cv2.waitKey(1)
 
-        count = counter
-        print("COUNTER DIFFERENCE", counter, count)
-        if count == 0:
-            count = np.inf
+        #count = counter - labels_variance*0.01
+        e = void_space
+        print("COUNTER DIFFERENCE", void_space, void_space_single)
+        # if count == 0:
+        #     count = np.inf
 
         # print("CURENT X", x, count)
-        return count
+        return e
+        # return np.linalg.norm(x - np.array([0.05, 0.04, 0.03, 0.01, 0.01, 0.01, 5.0]))
 
     def runOptimization(self):
 
         # map(float, np.array(args['initial_guess']))
-        x0 = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-        max_disp = 0.02
-        max_angle = 15*math.pi/180.0
+        x0 = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0])
+        max_disp = 0.03
+        max_angle = (35*math.pi/180.0)
         bounds = [
             (-max_disp, max_disp),
             (-max_disp, max_disp),
             (-max_disp, max_disp),
             (-max_angle, max_angle),
             (-max_angle, max_angle),
+            (-max_angle, max_angle),
             (-max_angle, max_angle)
         ]
 
         # res = minimize(self.optimizeSuperpixelsReduced, x0,
-        #                method='SLSQP',
+        #                method='L-BFGS-B',
         #                bounds=bounds,
-        #                options={'maxiter': 100000, 'disp': True, 'eps': 0.001})
+        #                options={'maxiter': 100000, 'disp': True, 'eps': 0.0001})
 
         res = differential_evolution(
             self.optimizeSuperpixelsReduced,
@@ -295,9 +324,9 @@ class LineOptimizer(object):
 
         # rgb_lines_img = lsd.drawSegments(zeros, rgb_lines)
         # model_lines_img = lsd.drawSegments(zeros, model_lines)
-        #diff = rgb_lines_img - model_lines_img
+        # diff = rgb_lines_img - model_lines_img
         diff = cv2.bitwise_and(rgb_lines_img, model_lines_img)
-        #diff = np.abs(diff.astype(np.uint8))
+        # diff = np.abs(diff.astype(np.uint8))
 
         count = np.count_nonzero(diff.ravel())
         print("MAXMIN", np.min(diff), np.max(diff), count)
@@ -484,8 +513,8 @@ for instance in json_data['classes']['5']['instances']:
 index = int(sys.argv[1])
 dindex = 20
 
-roll = -80
-pitch = -80
+roll = -83
+pitch = 70
 lsd = cv2.createLineSegmentDetector(0)
 optimized_correction = None  # PyKDL.Frame()
 while True:
@@ -494,7 +523,7 @@ while True:
 
     # Position 0 of the returned tuple are the detected lines
 
-    transform = PyKDL.Frame(PyKDL.Vector(0, 0, 0.03))
+    transform = PyKDL.Frame(PyKDL.Vector(0, 0, 0.0))
     transform.M.DoRotX(roll*math.pi/180.0)
     transform.M.DoRotY(pitch*math.pi/180.0)
 
@@ -505,6 +534,8 @@ while True:
     R = instance_frame_matrix[:3, :3]
     t = instance_frame_matrix[:3, 3]*1000.0
     im_size = (640, 480)
+
+    print("OBJECT POSE", instance_frame.M.GetQuaternion(), t)
     ren_rgb = renderer.render(model, im_size, K, R, t,
                               mode='rgb', surf_color=[0, 1.0, 0])
 
@@ -516,7 +547,7 @@ while True:
         cv2.imshow("image", image)
         c = cv2.waitKey(0)
 
-    #opt.optimizeSuperpixels(np.array([0.0, 0, 0, 0, 0, 0]))
+    # opt.optimizeSuperpixels(np.array([0.0, 0, 0, 0, 0, 0]))
 
     # if optimized_correction is not None:
     #     print("CORRECTING WIGH", optimized_correction)
@@ -548,7 +579,7 @@ while True:
             ariadne = Ariadne(
                 image_file=images[index], segmentator=segmentator)
             opt = SuperpixelOptimizer(
-                image, K, model, instance_frame, ariadne, debug=False)
+                image, K, model, instance_frame, ariadne, debug=True)
             optimized_correction = KDLFromArray(
                 opt.runOptimization(), fmt="RPY")
 
