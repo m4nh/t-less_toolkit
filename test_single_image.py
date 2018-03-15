@@ -129,7 +129,7 @@ class SuperpixelOptimizer(object):
             occupied_map[l] = float(labels_count[l]) / \
                 float(label_indices.shape[0])
 
-            if occupied_map[l] > 0.1:
+            if occupied_map[l] > 0.0001:
                 occupied += labels_count[l]
                 total += label_indices.shape[0]
 
@@ -162,7 +162,8 @@ class SuperpixelOptimizer(object):
 
         #count = counter - labels_variance*0.01
         e = void_space
-        print("COUNTER DIFFERENCE", void_space, void_space_single)
+        print("COUNTER DIFFERENCE", void_space,
+              void_space*labels.shape[0], void_space_single)
         # if count == 0:
         #     count = np.inf
 
@@ -170,34 +171,48 @@ class SuperpixelOptimizer(object):
         return e
         # return np.linalg.norm(x - np.array([0.05, 0.04, 0.03, 0.01, 0.01, 0.01, 5.0]))
 
-    def runOptimization(self):
+    def runOptimization(self, opt_type="l"):
+        if opt_type == 'ga':
+            x0 = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0])
+            max_disp = 0.03
+            max_angle = (35*math.pi/180.0)
+            bounds = [
+                (-max_disp, max_disp),
+                (-max_disp, max_disp),
+                (-max_disp, max_disp),
+                (-max_angle, max_angle),
+                (-max_angle, max_angle),
+                (-max_angle, max_angle),
+                (-max_angle, max_angle)
+            ]
 
-        # map(float, np.array(args['initial_guess']))
-        x0 = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0])
-        max_disp = 0.03
-        max_angle = (35*math.pi/180.0)
-        bounds = [
-            (-max_disp, max_disp),
-            (-max_disp, max_disp),
-            (-max_disp, max_disp),
-            (-max_angle, max_angle),
-            (-max_angle, max_angle),
-            (-max_angle, max_angle),
-            (-max_angle, max_angle)
-        ]
+            res = differential_evolution(
+                self.optimizeSuperpixelsReduced,
+                bounds=bounds, disp=True,
+                strategy='best2bin',
+                popsize=20, maxiter=5,
+                polish=True, mutation=(0.5, 1)
+            )
 
-        # res = minimize(self.optimizeSuperpixelsReduced, x0,
-        #                method='L-BFGS-B',
-        #                bounds=bounds,
-        #                options={'maxiter': 100000, 'disp': True, 'eps': 0.0001})
+        else:
+             # map(float, np.array(args['initial_guess']))
+            x0 = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0])
+            max_disp = 0.04
+            max_angle = (30*math.pi/180.0)
+            bounds = [
+                (-max_disp, max_disp),
+                (-max_disp, max_disp),
+                (-max_disp, max_disp),
+                (-max_angle, max_angle),
+                (-max_angle, max_angle),
+                (-max_angle, max_angle),
+                (-max_angle, max_angle)
+            ]
 
-        res = differential_evolution(
-            self.optimizeSuperpixelsReduced,
-            bounds=bounds, disp=True,
-            strategy='best2bin',
-            popsize=20, maxiter=5,
-            polish=True, mutation=(0.5, 1)
-        )
+            res = minimize(self.optimizeSuperpixelsReduced, x0,
+                           method='L-BFGS-B',
+                           bounds=bounds,
+                           options={'maxiter': 100000, 'disp': True, 'eps': 0.001})
         print("RESULT", res.x)
         return res.x
 
@@ -512,7 +527,12 @@ for instance in json_data['classes']['5']['instances']:
     print(frame)
 
 
-index = int(sys.argv[1])
+image_path = sys.argv[1]
+initial_guess = sys.argv[2]
+chunks = map(float, initial_guess.split(";"))
+print("CH(NKS", chunks)
+initial_guess = KDLFromArray(chunks, fmt="RPY")
+
 dindex = 20
 
 roll = -83
@@ -520,17 +540,10 @@ pitch = 70
 lsd = cv2.createLineSegmentDetector(0)
 optimized_correction = None  # PyKDL.Frame()
 while True:
-    image = cv2.imread(images[index])
+    image = cv2.imread(image_path)
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    # Position 0 of the returned tuple are the detected lines
-
-    transform = PyKDL.Frame(PyKDL.Vector(0, 0, 0.0))
-    transform.M.DoRotX(roll*math.pi/180.0)
-    transform.M.DoRotY(pitch*math.pi/180.0)
-
-    instance_frame = instances_poses[0]*transform
-    instance_frame = poses[index].Inverse() * instance_frame
+    instance_frame = initial_guess
 
     instance_frame_matrix = KLDtoNumpyMatrix(instance_frame)
     R = instance_frame_matrix[:3, :3]
@@ -571,24 +584,19 @@ while True:
 
     if c == 111:
         if optimized_correction is None:
-            segmentator = ImageSegmentator(segmentator_type='SLIC')
-            segmentator.options_map['n_segments'] = 250  # 2500
+            segmentator = ImageSegmentator(segmentator_type='QUICKSHIFT')
+            segmentator.options_map['n_segments'] = 500  # 2500
             segmentator.options_map['compactness'] = 10
             segmentator.options_map['sigma'] = 1
             #######################################
             # Ariadne
             #######################################
             ariadne = Ariadne(
-                image_file=images[index], segmentator=segmentator)
+                image_file=image_path, segmentator=segmentator)
             opt = SuperpixelOptimizer(
                 image, K, model, instance_frame, ariadne, debug=True)
             optimized_correction = KDLFromArray(
                 opt.runOptimization(), fmt="RPY")
-
-    if c == 100:
-        index += dindex
-    if c == 97:
-        index -= dindex
 
     #######################################
     # Roll

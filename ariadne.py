@@ -63,7 +63,7 @@ class ImageSegmentator(object):
                 image,
                 kernel_size=3,
                 max_dist=6,
-                ratio=0.5
+                ratio=0.1
             )
         elif self.segmentator_type == ImageSegmentator.SEGMENTATOR_FELZENSZWALB:
             return felzenszwalb(image, scale=100, sigma=0.5, min_size=50)
@@ -170,7 +170,8 @@ class AriadneGraph(object):
 
     def getNeighbourhood(self, target_node):
         neigh = self.adjacentNodes([target_node])
-        neigh2 = self.adjacentNodes(neigh, excluded_nodes=neigh + [target_node])
+        neigh2 = self.adjacentNodes(
+            neigh, excluded_nodes=neigh + [target_node])
         return neigh + neigh2
 
     def deepNeighbourhood(self, target_node, level=2, forced_excluded_nodes=[], include_start_seed=False, as_simple_list=False):
@@ -264,7 +265,8 @@ class AriadnePathTip(object):
     def draw(self, image, color=(255, 0, 255), thickness=4, size=30):
         direction = self.getDirection()
         p2 = self.position + direction * size
-        cv2.arrowedLine(image, tuple(self.position), tuple(p2.astype(int)), color, thickness, tipLength=0.5)
+        cv2.arrowedLine(image, tuple(self.position), tuple(
+            p2.astype(int)), color, thickness, tipLength=0.5)
 
 
 class AriadnePath(object):
@@ -324,14 +326,16 @@ class AriadnePath(object):
             return None
 
         if self.size() == 1 and direction is None:
-            print("Impossible to search: Path has only one node and no initial DIRECTION provided!")
+            print(
+                "Impossible to search: Path has only one node and no initial DIRECTION provided!")
             return None
 
         nodes = self.asList()
         points = self.as2DPoints()
 
         target_node = nodes[-1]
-        neighbourhood_list = self.ariadne.graph.deepNeighbourhood(target_node, level=max_level)
+        neighbourhood_list = self.ariadne.graph.deepNeighbourhood(
+            target_node, level=max_level)
         neighbourhood = list(itertools.chain.from_iterable(neighbourhood_list))
 
         pdfs = []
@@ -357,7 +361,8 @@ class AriadnePath(object):
 
             new_path = self.clone()
             new_path.addNode(n)
-            direction_pdf = predictor.computeScoreCurvature(new_path, initial_direction=direction)
+            direction_pdf = predictor.computeScoreCurvature(
+                new_path, initial_direction=direction)
 
             # self.removeNode(n)
             if direction is None:
@@ -381,7 +386,8 @@ class AriadnePath(object):
             return None
 
         if self.size() == 1 and direction is None:
-            print("Impossible to search: Path has only one node and no initial DIRECTION provided!")
+            print(
+                "Impossible to search: Path has only one node and no initial DIRECTION provided!")
             return None
 
         nodes = self.asList()
@@ -410,18 +416,21 @@ class AriadnePath(object):
                 continue
 
             visual_pdf = visual_matcher.compare(self.last_node, n)
-            norm_visual = visual_matcher.normalizeComparison(visual_pdf, max_compare)
+            norm_visual = visual_matcher.normalizeComparison(
+                visual_pdf, max_compare)
 
             new_path = self.clone()
             new_path.addNode(n)
-            direction_pdf = direction_matcher.computeScore(new_path, force_direction=direction)
+            direction_pdf = direction_matcher.computeScore(
+                new_path, force_direction=direction)
 
             # self.removeNode(n)
             if direction is None:
                 cumulative_pdf = norm_visual * direction_pdf
             else:
                 cumulative_pdf = direction_pdf
-            print("Match", target_node, n, visual_pdf,  direction_pdf, "=", cumulative_pdf, "|||", norm_visual, norm_visual * direction_pdf)
+            print("Match", target_node, n, visual_pdf,  direction_pdf, "=",
+                  cumulative_pdf, "|||", norm_visual, norm_visual * direction_pdf)
             pdfs.append(cumulative_pdf)
 
         #######################################
@@ -597,7 +606,8 @@ class AriadnePathFinder(object):
             return None
 
         if self.path.size() == 1 and direction is None:
-            print("Unable to find next: Path has only one node and no initial DIRECTION provided!")
+            print(
+                "Unable to find next: Path has only one node and no initial DIRECTION provided!")
             return None
 
         nodes = self.path.asList()
@@ -624,7 +634,8 @@ class AriadnePathFinder(object):
         #######################################
         visual_max_score = 0
         for n in neighbourhood:
-            visual_score = self.predictor.computeScoreVisual(self.path.last_node, n)
+            visual_score = self.predictor.computeScoreVisual(
+                self.path.last_node, n)
             if visual_score > visual_max_score:
                 visual_max_score = visual_score
 
@@ -636,13 +647,16 @@ class AriadnePathFinder(object):
                 pdfs.append(0.0)
                 continue
 
-            norm_visual_pdf = self.predictor.computeScoreVisual(self.path.last_node, n, reference_value=None)
+            norm_visual_pdf = self.predictor.computeScoreVisual(
+                self.path.last_node, n, reference_value=None)
 
             new_path = self.path.clone()
             new_path.addNode(n)
-            direction_pdf = self.predictor.computeScoreCurvature(new_path, initial_direction=direction)
+            direction_pdf = self.predictor.computeScoreCurvature(
+                new_path, initial_direction=direction)
 
-            distance_pdf = self.predictor.computeScoreDistance(self.path.last_node, n)
+            distance_pdf = self.predictor.computeScoreDistance(
+                self.path.last_node, n)
 
             # if '3' in self.name:
             #     self.predictor.curvature_predictor.computeScore(new_path, debug=True)
@@ -697,12 +711,14 @@ class AriadneMultiPathFinder(object):
 
     def startSearchInNeighbourhood(self, start_node, depth=1):
 
-        neighbourhood_raw = self.ariadne.graph.deepNeighbourhood(start_node, level=depth, as_simple_list=False)
+        neighbourhood_raw = self.ariadne.graph.deepNeighbourhood(
+            start_node, level=depth, as_simple_list=False)
         neighbourhood = neighbourhood_raw[-1]
 
         self.path_finders = []
         for i, n2 in enumerate(neighbourhood):
-            path_finder = AriadnePathFinder(self.ariadne, self.predictor, name="PathFinder_{}".format(i))
+            path_finder = AriadnePathFinder(
+                self.ariadne, self.predictor, name="PathFinder_{}".format(i))
             path_finder.initPathWithNeighboring(start_node, n2)
             self.path_finders.append(path_finder)
         self.iterations = 1
@@ -717,9 +733,11 @@ class AriadneMultiPathFinder(object):
         scores = []
         for i, f in enumerate(self.path_finders):
             if single_components:
-                scores.append(self.predictor.score_function.computeScores(f.path))
+                scores.append(
+                    self.predictor.score_function.computeScores(f.path))
             else:
-                scores.append(self.predictor.score_function.computeScore(f.path))
+                scores.append(
+                    self.predictor.score_function.computeScore(f.path))
         return scores
 
     def getBestPathFinder(self):
@@ -828,7 +846,8 @@ class Ariadne(object):
         image_path = data["image_path"][0]
 
         if not os.path.exists(image_path):
-            image_path = os.path.splitext(filename)[0] + "." + Ariadne.IMAGE_FILE_EXTENSION
+            image_path = os.path.splitext(
+                filename)[0] + "." + Ariadne.IMAGE_FILE_EXTENSION
 
         ar = Ariadne(
             image=None,
@@ -848,5 +867,6 @@ class Ariadne(object):
 
     @staticmethod
     def getImageProperties(filename):
-        properties_file = os.path.splitext(filename)[0] + "." + Ariadne.PROPERTIES_FILE_EXTENSION
+        properties_file = os.path.splitext(
+            filename)[0] + "." + Ariadne.PROPERTIES_FILE_EXTENSION
         return properties_file
