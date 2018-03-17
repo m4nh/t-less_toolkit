@@ -113,9 +113,9 @@ class SuperpixelOptimizer(object):
         output = image.copy()
         output[ren_rgb > 0] = ren_rgb[ren_rgb > 0]
 
-        cv2.imshow("image", image_angle)
-        cv2.imshow("model", model_angle)
-        cv2.imshow("mask", diff)
+        # cv2.imshow("image", image_angle)
+        # cv2.imshow("model", model_angle)
+        # cv2.imshow("mask", diff)
         cv2.imshow("output", output)
 
         cv2.waitKey(1)
@@ -127,7 +127,7 @@ class SuperpixelOptimizer(object):
         x = x.reshape(7,).copy()
 
         base_frame = self.instance_frame
-        #x = np.multiply(x, self.gains)
+        # x = np.multiply(x, self.gains)
 
         frame = KDLFromArray(x, fmt=LineOptimizer.DEFAULT_FORMAT)
         frame = base_frame*frame
@@ -150,7 +150,7 @@ class SuperpixelOptimizer(object):
         ii = np.nonzero(y)[0]
         labels_count = dict(zip(ii, y[ii]))
         labels_variance = np.var(y[ii])
-        #print("LABELS_COUNT", labels_count, dict(labels_count))
+        # print("LABELS_COUNT", labels_count, dict(labels_count))
         # And then:
 
         # print("LABELS", labels)
@@ -171,16 +171,16 @@ class SuperpixelOptimizer(object):
             occupied_map[l] = float(labels_count[l]) / \
                 float(label_indices.shape[0])
 
-            if occupied_map[l] > 0.0001:
+            if occupied_map[l] > 0.1:
                 occupied += labels_count[l]
                 total += label_indices.shape[0]
 
-            if self.debug:
-                output_image[label_indices[:, 0], label_indices[:, 1]] = np.array(
-                    [255, 255, 255]).astype(np.uint8)
+                if self.debug:
+                    output_image[label_indices[:, 0], label_indices[:, 1]] = np.array(
+                        [255, 255, 255]).astype(np.uint8)
 
-                zero[label_indices[:, 0], label_indices[:, 1]] = np.array(
-                    [255]).astype(np.uint8)
+                    zero[label_indices[:, 0], label_indices[:, 1]] = np.array(
+                        [255]).astype(np.uint8)
 
         if self.debug:
             output_image[nonzeroindices[:, 0], nonzeroindices[:, 1]] = np.array(
@@ -194,7 +194,7 @@ class SuperpixelOptimizer(object):
         void_space_single /= float(labels.shape[0])
 
         void_space = (float(total)-float(occupied))/float(total)
-        #print("VOID_SPACE", void_space, void_space_single)
+        # print("VOID_SPACE", void_space, void_space_single)
 
         if self.debug:
             cv2.imshow("model", ren_rgb)
@@ -202,7 +202,7 @@ class SuperpixelOptimizer(object):
             cv2.imshow("zero", zero)
             c = cv2.waitKey(1)
 
-        #count = counter - labels_variance*0.01
+        # count = counter - labels_variance*0.01
         e = void_space
         print("COUNTER DIFFERENCE", void_space,
               void_space*labels.shape[0], void_space_single)
@@ -216,8 +216,8 @@ class SuperpixelOptimizer(object):
     def runOptimization(self, opt_type="ga"):
         if opt_type == 'ga':
             x0 = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0])
-            max_disp = 0.01
-            max_angle = (15*math.pi/180.0)
+            max_disp = 0.03
+            max_angle = (30*math.pi/180.0)
             bounds = [
                 (-max_disp, max_disp),
                 (-max_disp, max_disp),
@@ -229,19 +229,17 @@ class SuperpixelOptimizer(object):
             ]
 
             res = differential_evolution(
-                # self.optimizeSuperpixelsReduced,
+                # sself.optimizeSuperpixelsReduced,
                 self.optimizeGradientOrientation,
                 bounds=bounds, disp=True,
-                strategy='best2bin',
-                popsize=20, maxiter=5,
-                polish=True, mutation=(0.5, 1)
+                popsize=16, maxiter=5
             )
 
         else:
              # map(float, np.array(args['initial_guess']))
             x0 = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0])
-            max_disp = 0.01
-            max_angle = (10*math.pi/180.0)
+            max_disp = 0.03
+            max_angle = (30*math.pi/180.0)
             bounds = [
                 (-max_disp, max_disp),
                 (-max_disp, max_disp),
@@ -253,7 +251,7 @@ class SuperpixelOptimizer(object):
             ]
 
             res = minimize(
-                # self.optimizeSuperpixelsReduced,
+                # sself.optimizeSuperpixelsReduced,
                 self.optimizeGradientOrientation,
                 x0,
                 method='L-BFGS-B',
@@ -520,8 +518,8 @@ dataset_path = '/Users/daniele/Desktop/to_delete/roars_dataset/indust_scene_1_do
 camera_extrinsics_path = '/Users/daniele/Desktop/to_delete/roars_dataset/indust_scene_1_dome/camera_extrinsics.txt'
 camera_intrinsics_path = '/Users/daniele/Desktop/to_delete/roars_dataset/indust_scene_1_dome/camera_intrisics.txt'
 poses_path = '/Users/daniele/Desktop/to_delete/roars_dataset/indust_scene_1_dome/robot_poses.txt'
-#model_path = '/Users/daniele/Downloads/industrial_part2.ply'
-model_path = '/Users/daniele/Desktop/test.ply'
+# model_path = '/Users/daniele/Downloads/industrial_part2.ply'
+model_path = '/Users/daniele/Downloads/models/obj_09.ply'
 
 #######################################
 # Model
@@ -539,11 +537,8 @@ json_data = json.load(open(dataset_path))
 # Intrinsics
 #######################################
 K_raw = np.loadtxt(camera_intrinsics_path)
-K = np.array([
-    [K_raw[2], 0, K_raw[4]],
-    [0, K_raw[3], K_raw[5]],
-    [0, 0, 1.0]
-])
+K = np.array([572.4114, 0.0, 325.2611, 0.0, 573.57043,
+              242.04899, 0.0, 0.0, 1.0]).reshape(3, 3)
 
 #######################################
 # Extrinsics
